@@ -43,6 +43,15 @@ public class User {
     @Column(name = "completed_leads")
     private Integer completedLeads;
 
+    @Column(name = "wrote_password")
+    private Boolean wrotePassword;
+
+    @Column(name = "wrote_username")
+    private Boolean wroteUsername;
+
+    @Column(name = "is_registered")
+    private Boolean isRegistered;
+
     @ManyToOne
     @JoinColumn(name = "session_id")
     private Session session;

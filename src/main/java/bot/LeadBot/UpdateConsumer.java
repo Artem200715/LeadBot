@@ -1,5 +1,9 @@
 package bot.LeadBot;
 
+import bot.db.User;
+import bot.func.LeadService;
+import bot.func.SessionService;
+import bot.func.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -23,11 +27,15 @@ import java.util.List;
 @Component
 public class UpdateConsumer implements LongPollingUpdateConsumer {
     private final TelegramClient telegramClient;
-
+    private final LeadService leadService;
+    private final UserService userService;
+    private final SessionService sessionService;
     //токен бота нужно вписать в application.properties
-    public UpdateConsumer(@Value("${bot.token}") String botToken) {
+    public UpdateConsumer(@Value("${bot.token}") String botToken, LeadService leadService, UserService userService, SessionService sessionService) {
         this.telegramClient = new org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient(botToken);
-        // this.yourService = yourService;
+        this.leadService = leadService;
+        this.userService = userService;
+        this.sessionService = sessionService;
     }
 
 
@@ -37,11 +45,34 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
     }
     @Async
     public void processUpdateAsync(Update update) {
-        Long  chatId = update.getMessage().getChatId();
         try {
-            if(update.hasMessage() && update.getMessage().hasText()) {
-                sendMessage(chatId, update.getMessage().getText());
-            }/* else if () {} и так далее, короче тут основная обработка входящих обновлений*/
+            if(update.hasMessage()) {
+                Long chatId = update.getMessage().getChatId();
+                User currentUser = userService.findUserById(chatId);
+                String currentSession = currentUser.getSession().getName();
+                String text = update.getMessage().getText();
+                if (text.equals("/help")) {
+                    sendMessage(chatId, """
+                            /start - начало работы бота
+                            /restart - перезапуск работы бота
+                            (Осторожно, бездумный перезапуск может сломать некоторые процессы, так что
+                            перезапускайте бота только в случае полной поломки!!!)""");
+                } else if(text.equals("/restart")) {
+                    currentUser.setWroteUsername(false);
+                    currentUser.setWrotePassword(false);
+                    currentUser.setIsRegistered(false);
+                    sessionService.setSession("Ничего", currentUser);
+                } else {
+                    if(!currentUser.getIsRegistered()) {
+                        if (text.equals("/start")) {
+                            sendRegLogButton(chatId, "Выберите способ авторизации:");
+                        } else {
+                            sendMessage(chatId, "Вы не авторизованы! Введите /start для начала работы с ботом");
+                        }
+                    }
+                }
+
+            }
         } catch (Exception e) {
             System.err.println("Ошибка при обработке обновления: " + e.getMessage());
             e.printStackTrace();
@@ -76,7 +107,6 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
         }
     }
 
-    //Кнопка. Да, это не сообщение с кнопкой, господи, как сделать сообщение с ней тоже покажу
     InlineKeyboardButton createBtn(String name, String data) {
         return InlineKeyboardButton.builder()
                 .text(name)
@@ -84,8 +114,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                 .build();
     }
 
-    //Вот сообщение с кнопкой, ну и дальше логика простая, накрайняк можно загуглить
-    public void sendPrimerButton(Long chatId, String answer) throws TelegramApiException {
+    public void sendRegLogButton(Long chatId, String answer) throws TelegramApiException {
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(answer)

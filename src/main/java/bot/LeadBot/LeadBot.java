@@ -7,12 +7,10 @@ import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 
 @Component
 public class LeadBot implements SpringLongPollingBot {
-    //Это для будущего файла UpdateConsumer
     private final UpdateConsumer updateConsumer;
-    // в application.properties мы пишем токен нашего бота, полученный от BotFather
     @Value("${bot.token}")
     private String token;
-   //
+
     public LeadBot(UpdateConsumer updateConsumer) {
         this.updateConsumer = updateConsumer;
     }

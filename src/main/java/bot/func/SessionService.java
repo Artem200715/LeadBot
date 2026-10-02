@@ -2,8 +2,7 @@ package bot.func;
 
 import bot.db.Session;
 import bot.db.User;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,33 +13,44 @@ public class SessionService {
     private UserService userService;
     @Transactional
     public void setSession(String sessionName, Long chatId) {
-        Session session = entityManager.find(Session.class, sessionName);
-
+        TypedQuery<Session> query = entityManager.createQuery("FROM Session WHERE name = :name", Session.class);
+        query.setParameter("name", sessionName);
+        Session session;
+        try {
+            session = query.getSingleResult();
+        } catch (NoResultException e) {
+            session = null;
+        }
         if (session == null) {
             Session newSession = new Session();
             newSession.setName(sessionName);
-            entityManager.persist(newSession);
+            entityManager.merge(newSession);
             entityManager.flush();
         }
         User user = userService.findUserById(chatId);
         user.setSession(session);
-        entityManager.persist(user);
+        entityManager.merge(user);
         entityManager.flush();
     }
     @Transactional
     public void setSession(String sessionName, User user) {
-        Session session = entityManager.find(Session.class, sessionName);
+        TypedQuery<Session> query = entityManager.createQuery("FROM Session WHERE name = :name", Session.class);
+        query.setParameter("name", sessionName);
+        Session session;
+        try {
+            session = query.getSingleResult();
+        } catch (NoResultException e) {
+            session = null;
+        }
 
         if (session == null) {
-            Session newSession = new Session();
-            newSession.setName(sessionName);
-            user.setSession(newSession);
-            entityManager.persist(newSession);
-        } else {
-            user.setSession(session);
+            session = new Session();
+            session.setName(sessionName);
+            entityManager.persist(session);
         }
-        entityManager.persist(user);
-        entityManager.flush();
+
+        user.setSession(session);
+        entityManager.merge(user);
 
     }
 }

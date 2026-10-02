@@ -10,6 +10,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service
 public class UserService {
     @PersistenceContext
@@ -85,6 +87,12 @@ public class UserService {
             user = null;
         }
         return user != null;
+    }
+    @Transactional
+    public void setCreatedAt(User user) {
+        user.setCreatedAt(LocalDateTime.now());
+        entityManager.merge(user);
+        entityManager.flush();
     }
     @Transactional
     public User findUserById(Long chatId) {

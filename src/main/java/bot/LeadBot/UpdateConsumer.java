@@ -72,6 +72,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                     if(!currentUser.getIsRegistered()) {
                         if (text.equals("/start")) {
                             sendRegLogButton(chatId, "Выберите способ авторизации:");
+                            sessionService.setSession("Ничего", currentUser);
                         } else if(currentSession.equals("Ввод пароляР")) {
                             sendMessage(chatId, "Повторите ввод пароля");
                             setCheckPassword(chatId, passwordEncoder.encode(text));
@@ -123,6 +124,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         sessionService.setSession("Ничего", currentUser);
                         userService.setWroteUsername(currentUser, false);
                         userService.setWrotePassword(currentUser, false);
+                        userService.setCreatedAt(currentUser);
                         editMessage(chatId, messageId, "Вы успешно создали аккаунт!");
                     }
                 }
@@ -214,8 +216,8 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                 .build();
         List<InlineKeyboardRow> keyboard = new ArrayList<>();
         keyboard.add(new InlineKeyboardRow(
-                createBtn((WroteP) ? "Пароль [✅]" : "Пароль [❌]", "passwordR"),
-                createBtn((WroteU) ? "Логин [✅]" : "Логин [❌]", "loginR")
+                createBtn((WroteU) ? "Логин [✅]" : "Логин [❌]", "loginR"),
+                createBtn((WroteP) ? "Пароль [✅]" : "Пароль [❌]", "passwordR")
         ));
         if (WroteU && WroteP) {
             keyboard.add(new InlineKeyboardRow(

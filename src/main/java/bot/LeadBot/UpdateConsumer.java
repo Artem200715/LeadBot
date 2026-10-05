@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class UpdateConsumer implements LongPollingUpdateConsumer {
     Map<Long, String> checkPassword = new ConcurrentHashMap<>();
+    Map<Long, String> keepLoginInMind = new ConcurrentHashMap<>();
     private final TelegramClient telegramClient;
     private final LeadService leadService;
     private final UserService userService;
@@ -96,8 +97,26 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                                 userService.setUsername(text, currentUser);
                                 sendRegButton(chatId, "Для регистрации введите следующие данные:", currentUser);
                             }
+                        } else if (currentSession.equals("Ввод логинаЛ")) {
+                            if (userService.checkLogin(text)) {
+                                userService.setWroteUsername(currentUser, true);
+                                keepLoginInMind.put(chatId, text);
+                                sessionService.setSession("Логин", currentUser);
+                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
+                            } else {
+                                sendMessage(chatId, "Такого пользователя не существует!");
+                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
+                            }
+                        } else if(currentSession.equals("Ввод пароляЛ")) {
+                            if (passwordEncoder.matches(text, userService.findUserByLogin(keepLoginInMind.get(chatId)).getPassword())) {
+                                userService.setWrotePassword(currentUser, true);
+                                sessionService.setSession("Логин", currentUser);
+                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт", currentUser);
+                            } else {
+                                sendMessage(chatId, "Неверный пароль!!!");
+                            }
                         } else {
-                            sendMessage(chatId, "Вы не авторизованы! Введите /start для начала работы с ботом");
+                            sendMessage(chatId, "Вы не авторизованы! Введите /start для начала авторизации");
 
                         }
                     }
@@ -117,7 +136,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         editMessage(chatId, messageId, "Придумайте пароль:");
                         sessionService.setSession("Ввод пароляР", currentUser);
                     } else if(data.equals("loginR")) {
-                        editMessage(chatId, messageId, "Придумайте логин");
+                        editMessage(chatId, messageId, "Придумайте логин:");
                         sessionService.setSession("Ввод логинаР", currentUser);
                     } else if(data.equals("completeR")) {
                         userService.setIsRegistered(currentUser, true);
@@ -125,7 +144,43 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         userService.setWroteUsername(currentUser, false);
                         userService.setWrotePassword(currentUser, false);
                         userService.setCreatedAt(currentUser);
-                        editMessage(chatId, messageId, "Вы успешно создали аккаунт!");
+                        sendMenuButton(chatId, messageId, "Вы успешно создали аккаунт!");
+                    } else if (data.equals("login") && currentSession.equals("Ничего")) {
+                        sendLogButton(chatId, messageId, "Введите следующие данные для входа в аккаунт:", currentUser);
+                        sessionService.setSession("Логин",  currentUser);
+                    } else if (data.equals("passwordL")) {
+                        if(currentUser.getWroteUsername()) {
+                            sendMessage(chatId, "Введите пароль:");
+                            sessionService.setSession("Ввод пароляЛ", currentUser);
+                        } else {
+                            sendMessage(chatId, "Сначала введите логин!");
+                        }
+                    } else if(data.equals("loginL")) {
+                        editMessage(chatId, messageId, "Введите логин:");
+                        sessionService.setSession("Ввод логинаЛ", currentUser);
+                    } else if(data.equals("completeL")) {
+                        User newUser = userService.findUserByLogin(keepLoginInMind.get(chatId));
+                        userService.setIsRegistered(newUser, true);
+                        sessionService.setSession("Ничего", newUser);
+                        userService.setWroteUsername(newUser, false);
+                        userService.setWrotePassword(newUser, false);
+                        userService.deleteCurrentUser(chatId);
+                        userService.setChatId(newUser, chatId);
+                        keepLoginInMind.remove(chatId);
+                        sendMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
+                    } else if(data.equals("backRL")) {
+                        sessionService.setSession("Ничего", currentUser);
+                        userService.setWroteUsername(currentUser, false);
+                        userService.setWrotePassword(currentUser, false);
+                        sendRegLogButton(chatId, messageId, "Выберите способ авторизации");
+                    }
+                } else {
+                    if(data.equals("logout")) {
+                        sessionService.setSession("Ничего",  currentUser);
+                        userService.setIsRegistered(currentUser, false);
+                        userService.deleteChatId(currentUser);
+                        editMessage(chatId, messageId, "Вы успешно вышли из аккаунта!");
+                        sendRegLogButton(chatId, "Выберите способ авторизации:");
                     }
                 }
 
@@ -185,6 +240,24 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
         telegramClient.execute(message);
 
     }
+    public void sendRegLogButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
+        EditMessageText editMessage = EditMessageText.builder()
+                .chatId(chatId)
+                .messageId(messageId)
+                .text(answer)
+                .build();
+
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Регистрация", "registration"),
+                createBtn("Вход", "login")
+        ));
+
+        editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(editMessage);
+
+    }
 
     public void sendRegButton(Long chatId, Integer messageId, String answer, User currentUser) throws TelegramApiException {
         boolean WroteP = currentUser.getWrotePassword();
@@ -203,7 +276,12 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
             keyboard.add(new InlineKeyboardRow(
                     createBtn("Зарегистрироваться", "completeR")
             ));
+        } else {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Назад", "backRL")
+            ));
         }
+
         editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
         telegramClient.execute(editMessage);
     }
@@ -223,9 +301,82 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
             keyboard.add(new InlineKeyboardRow(
                     createBtn("Зарегистрироваться", "completeR")
             ));
+        } else {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Назад", "backRL")
+            ));
         }
+
         message.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
         telegramClient.execute(message);
+    }
+    public void sendLogButton(Long chatId, String answer, User currentUser) throws TelegramApiException {
+        boolean WroteP = currentUser.getWrotePassword();
+        boolean WroteU = currentUser.getWroteUsername();
+        SendMessage message = SendMessage.builder()
+                .chatId(chatId)
+                .text(answer)
+                .build();
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+        keyboard.add(new InlineKeyboardRow(
+                createBtn((WroteU) ? "Логин [✅]" : "Логин [❌]", "loginL"),
+                createBtn((WroteP) ? "Пароль [✅]" : "Пароль [❌]", "passwordL")
+        ));
+        if (WroteU && WroteP) {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Войти", "completeL")
+            ));
+        } else {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Назад", "backRL")
+            ));
+        }
+
+        message.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(message);
+    }
+    public void sendLogButton(Long chatId, Integer messageId, String answer, User currentUser) throws TelegramApiException {
+        boolean WroteP = currentUser.getWrotePassword();
+        boolean WroteU = currentUser.getWroteUsername();
+        EditMessageText editMessage = EditMessageText.builder()
+                .chatId(chatId)
+                .messageId(messageId)
+                .text(answer)
+                .build();
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+        keyboard.add(new InlineKeyboardRow(
+                createBtn((WroteU) ? "Логин [✅]" : "Логин [❌]", "loginL"),
+                createBtn((WroteP) ? "Пароль [✅]" : "Пароль [❌]", "passwordL")
+        ));
+        if (WroteU && WroteP) {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Войти", "completeL")
+            ));
+        } else {
+            keyboard.add(new InlineKeyboardRow(
+                    createBtn("Назад", "backRL")
+            ));
+        }
+
+        editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(editMessage);
+    }
+    public void sendMenuButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
+        EditMessageText editMessage = EditMessageText.builder()
+                .chatId(chatId)
+                .messageId(messageId)
+                .text(answer)
+                .build();
+
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Выйти из аккаунта", "logout")
+        ));
+
+        editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(editMessage);
+
     }
     public void setCheckPassword(Long chatId, String password) {
         checkPassword.put(chatId, password);

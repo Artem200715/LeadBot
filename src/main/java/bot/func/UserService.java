@@ -7,6 +7,7 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,7 @@ public class UserService {
     @PersistenceContext
     private EntityManager entityManager;
     private SessionService sessionService;
+    private PasswordEncoder passwordEncoder;
     @Transactional
     public void createTempUser(Long chatId) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE chatId = :chatId", User.class);
@@ -43,11 +45,6 @@ public class UserService {
         } else {
             return;
         }
-
-    }
-    @Transactional
-    public void createUser(String username, String password) {
-        User user = new User();
 
     }
     @Transactional
@@ -89,6 +86,19 @@ public class UserService {
         return user != null;
     }
     @Transactional
+    public void deleteChatId(User user) {
+        user.setChatId(null);
+        entityManager.merge(user);
+        entityManager.flush();
+    }
+    @Transactional
+    public void setChatId(User user, Long chatId) {
+        user.setChatId(chatId);
+        entityManager.merge(user);
+        entityManager.flush();
+    }
+
+    @Transactional
     public void setCreatedAt(User user) {
         user.setCreatedAt(LocalDateTime.now());
         entityManager.merge(user);
@@ -112,6 +122,32 @@ public class UserService {
         }
         return user;
 
+    }
+    @Transactional
+    public User findUserByLogin(String login) {
+        TypedQuery<User> query = entityManager.createQuery("FROM User WHERE username = :username", User.class);
+        query.setParameter("username", login);
+        User user;
+        try {
+            user = query.getSingleResult();
+        } catch (NoResultException e) {
+            user = null;
+        }
+        return user;
+
+    }
+    @Transactional
+    public void deleteCurrentUser(Long chatId) {
+        TypedQuery<User> query = entityManager.createQuery(
+                "FROM User WHERE chatId = :chatId", User.class);
+        query.setParameter("chatId", chatId);
+        User user;
+        try {
+            user = query.getSingleResult();
+        } catch (NoResultException e) {
+            return; // нечего удалять
+        }
+        entityManager.remove(user);
     }
     @Transactional
     public void setPassword(String password, User user) {

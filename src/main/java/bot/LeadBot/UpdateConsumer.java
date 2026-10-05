@@ -24,16 +24,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-//Если честно, так как это тестовый шаблон, и технологии тут будут тестовые, так что может и не
-//работать, ну короче тут будет основная работа бота, и тут будет впервые применена именно вариация с
-//многопоточностью
-
 @Component
 public class UpdateConsumer implements LongPollingUpdateConsumer {
     Map<Long, String> checkPassword = new ConcurrentHashMap<>();
     Map<Long, String> keepLoginInMind = new ConcurrentHashMap<>();
-//    Map<Long, String> keepLogin = new ConcurrentHashMap<>();
-//    Map<Long, String> keepPassword = new ConcurrentHashMap<>();
     private final TelegramClient telegramClient;
     private final LeadService leadService;
     private final UserService userService;
@@ -74,52 +68,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                     sessionService.setSession("Ничего", currentUser);
                 } else {
                     if(!currentUser.getIsRegistered()) {
-                        if (text.equals("/start")) {
-                            sendRegLogButton(chatId, "Выберите способ авторизации:");
-                            sessionService.setSession("Ничего", currentUser);
-                        } else if(currentSession.equals("Ввод пароляР")) {
-                            sendMessage(chatId, "Повторите ввод пароля");
-                            setCheckPassword(chatId, passwordEncoder.encode(text));
-                            sessionService.setSession("Повтор пароля", currentUser);
-                        } else if(currentSession.equals("Повтор пароля")) {
-                            if (passwordEncoder.matches(text, getCheckPassword(chatId))) {
-                                userService.setWrotePassword(currentUser, true);
-                                sessionService.setSession("Регистрация", currentUser);
-                                sendRegButton(chatId, "Для регистрации введите следующие данные", currentUser);
-                            } else {
-                                sendMessage(chatId, "Пароли не совпадают!");
-                            }
-                        } else if (currentSession.equals("Ввод логинаР")) {
-                            if (userService.checkLogin(text)) {
-                                sendMessage(chatId, "Такой пользователь уже существует!!!");
-                            } else {
-                                sessionService.setSession("Регистрация", currentUser);
-                                userService.setWroteUsername(currentUser, true);
-                                keepLoginInMind.put(chatId, text);
-                                sendRegButton(chatId, "Для регистрации введите следующие данные:", currentUser);
-                            }
-                        } else if (currentSession.equals("Ввод логинаЛ")) {
-                            if (userService.checkLogin(text)) {
-                                userService.setWroteUsername(currentUser, true);
-                                keepLoginInMind.put(chatId, text);
-                                sessionService.setSession("Логин", currentUser);
-                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
-                            } else {
-                                sendMessage(chatId, "Такого пользователя не существует!");
-                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
-                            }
-                        } else if(currentSession.equals("Ввод пароляЛ")) {
-                            if (passwordEncoder.matches(text, userService.findUserByLogin(keepLoginInMind.get(chatId)).getPassword())) {
-                                userService.setWrotePassword(currentUser, true);
-                                sessionService.setSession("Логин", currentUser);
-                                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт", currentUser);
-                            } else {
-                                sendMessage(chatId, "Неверный пароль!!!");
-                            }
-                        } else {
-                            sendMessage(chatId, "Вы не авторизованы! Введите /start для начала авторизации");
-
-                        }
+                        authorizationM(chatId, currentUser, currentSession, text);
                     }
                 }
 
@@ -130,55 +79,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                 String data = update.getCallbackQuery().getData();
                 Integer messageId = update.getCallbackQuery().getMessage().getMessageId();
                 if (!currentUser.getIsRegistered()) {
-                    if (data.equals("registration") && currentSession.equals("Ничего")) {
-                        sendRegButton(chatId, messageId, "Для регистрации введите следующие данные", currentUser);
-                        sessionService.setSession("Регистрация",  currentUser);
-                    } else if (data.equals("passwordR")) {
-                        editMessage(chatId, messageId, "Придумайте пароль:");
-                        sessionService.setSession("Ввод пароляР", currentUser);
-                    } else if(data.equals("loginR")) {
-                        editMessage(chatId, messageId, "Придумайте логин:");
-                        sessionService.setSession("Ввод логинаР", currentUser);
-                    } else if(data.equals("completeR")) {
-                        userService.setIsRegistered(currentUser, true);
-                        sessionService.setSession("Ничего", currentUser);
-                        userService.setUsername(keepLoginInMind.get(chatId), currentUser);
-                        userService.setPassword(checkPassword.get(chatId), currentUser);
-                        removeKeepLoginInMind(chatId);
-                        removeCheckPassword(chatId);
-                        userService.setWroteUsername(currentUser, false);
-                        userService.setWrotePassword(currentUser, false);
-                        userService.setCreatedAt(currentUser);
-                        sendUserMenuButton(chatId, messageId, "Вы успешно создали аккаунт!");
-                    } else if (data.equals("login") && currentSession.equals("Ничего")) {
-                        sendLogButton(chatId, messageId, "Введите следующие данные для входа в аккаунт:", currentUser);
-                        sessionService.setSession("Логин",  currentUser);
-                    } else if (data.equals("passwordL")) {
-                        if(currentUser.getWroteUsername()) {
-                            sendMessage(chatId, "Введите пароль:");
-                            sessionService.setSession("Ввод пароляЛ", currentUser);
-                        } else {
-                            sendMessage(chatId, "Сначала введите логин!");
-                        }
-                    } else if(data.equals("loginL")) {
-                        editMessage(chatId, messageId, "Введите логин:");
-                        sessionService.setSession("Ввод логинаЛ", currentUser);
-                    } else if(data.equals("completeL")) {
-                        User newUser = userService.findUserByLogin(keepLoginInMind.get(chatId));
-                        userService.setIsRegistered(newUser, true);
-                        sessionService.setSession("Ничего", newUser);
-                        userService.setWroteUsername(newUser, false);
-                        userService.setWrotePassword(newUser, false);
-                        userService.deleteCurrentUser(chatId);
-                        userService.setChatId(newUser, chatId);
-                        removeKeepLoginInMind(chatId);
-                        sendUserMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
-                    } else if(data.equals("backRL")) {
-                        sessionService.setSession("Ничего", currentUser);
-                        userService.setWroteUsername(currentUser, false);
-                        userService.setWrotePassword(currentUser, false);
-                        sendRegLogButton(chatId, messageId, "Выберите способ авторизации");
-                    }
+                    authorizationCQ(chatId, currentUser, currentSession, data, messageId);
                 } else {
                     if(data.equals("logout")) {
                         sessionService.setSession("Ничего",  currentUser);
@@ -382,6 +283,122 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
         editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
         telegramClient.execute(editMessage);
 
+    }
+    public void sendWorkerMenuButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
+        EditMessageText editMessage = EditMessageText.builder()
+                .chatId(chatId)
+                .messageId(messageId)
+                .text(answer)
+                .build();
+
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Выйти из аккаунта", "logout")
+        ));
+
+        editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(editMessage);
+
+    }
+    public void authorizationM(Long chatId, User currentUser, String currentSession, String text) throws TelegramApiException {
+        if (text.equals("/start")) {
+            sendRegLogButton(chatId, "Выберите способ авторизации:");
+            sessionService.setSession("Ничего", currentUser);
+        } else if(currentSession.equals("Ввод пароляР")) {
+            sendMessage(chatId, "Повторите ввод пароля");
+            setCheckPassword(chatId, passwordEncoder.encode(text));
+            sessionService.setSession("Повтор пароля", currentUser);
+        } else if(currentSession.equals("Повтор пароля")) {
+            if (passwordEncoder.matches(text, getCheckPassword(chatId))) {
+                userService.setWrotePassword(currentUser, true);
+                sessionService.setSession("Регистрация", currentUser);
+                sendRegButton(chatId, "Для регистрации введите следующие данные", currentUser);
+            } else {
+                sendMessage(chatId, "Пароли не совпадают!");
+            }
+        } else if (currentSession.equals("Ввод логинаР")) {
+            if (userService.checkLogin(text)) {
+                sendMessage(chatId, "Такой пользователь уже существует!!!");
+            } else {
+                sessionService.setSession("Регистрация", currentUser);
+                userService.setWroteUsername(currentUser, true);
+                keepLoginInMind.put(chatId, text);
+                sendRegButton(chatId, "Для регистрации введите следующие данные:", currentUser);
+            }
+        } else if (currentSession.equals("Ввод логинаЛ")) {
+            if (userService.checkLogin(text)) {
+                userService.setWroteUsername(currentUser, true);
+                keepLoginInMind.put(chatId, text);
+                sessionService.setSession("Логин", currentUser);
+                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
+            } else {
+                sendMessage(chatId, "Такого пользователя не существует!");
+                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт:", currentUser);
+            }
+        } else if(currentSession.equals("Ввод пароляЛ")) {
+            if (passwordEncoder.matches(text, userService.findUserByLogin(keepLoginInMind.get(chatId)).getPassword())) {
+                userService.setWrotePassword(currentUser, true);
+                sessionService.setSession("Логин", currentUser);
+                sendLogButton(chatId, "Введите следующие данные для входа в аккаунт", currentUser);
+            } else {
+                sendMessage(chatId, "Неверный пароль!!!");
+            }
+        } else {
+            sendMessage(chatId, "Вы не авторизованы! Введите /start для начала авторизации");
+
+        }
+    }
+    public void authorizationCQ(Long chatId, User currentUser, String currentSession, String data, Integer messageId) throws TelegramApiException {
+        if (data.equals("registration") && currentSession.equals("Ничего")) {
+            sendRegButton(chatId, messageId, "Для регистрации введите следующие данные", currentUser);
+            sessionService.setSession("Регистрация",  currentUser);
+        } else if (data.equals("passwordR")) {
+            editMessage(chatId, messageId, "Придумайте пароль:");
+            sessionService.setSession("Ввод пароляР", currentUser);
+        } else if(data.equals("loginR")) {
+            editMessage(chatId, messageId, "Придумайте логин:");
+            sessionService.setSession("Ввод логинаР", currentUser);
+        } else if(data.equals("completeR")) {
+            userService.setIsRegistered(currentUser, true);
+            sessionService.setSession("Ничего", currentUser);
+            userService.setUsername(keepLoginInMind.get(chatId), currentUser);
+            userService.setPassword(checkPassword.get(chatId), currentUser);
+            removeKeepLoginInMind(chatId);
+            removeCheckPassword(chatId);
+            userService.setWroteUsername(currentUser, false);
+            userService.setWrotePassword(currentUser, false);
+            userService.setCreatedAt(currentUser);
+            sendUserMenuButton(chatId, messageId, "Вы успешно создали аккаунт!");
+        } else if (data.equals("login") && currentSession.equals("Ничего")) {
+            sendLogButton(chatId, messageId, "Введите следующие данные для входа в аккаунт:", currentUser);
+            sessionService.setSession("Логин",  currentUser);
+        } else if (data.equals("passwordL")) {
+            if(currentUser.getWroteUsername()) {
+                sendMessage(chatId, "Введите пароль:");
+                sessionService.setSession("Ввод пароляЛ", currentUser);
+            } else {
+                sendMessage(chatId, "Сначала введите логин!");
+            }
+        } else if(data.equals("loginL")) {
+            editMessage(chatId, messageId, "Введите логин:");
+            sessionService.setSession("Ввод логинаЛ", currentUser);
+        } else if(data.equals("completeL")) {
+            User newUser = userService.findUserByLogin(keepLoginInMind.get(chatId));
+            userService.setIsRegistered(newUser, true);
+            sessionService.setSession("Ничего", newUser);
+            userService.setWroteUsername(newUser, false);
+            userService.setWrotePassword(newUser, false);
+            userService.deleteCurrentUser(chatId);
+            userService.setChatId(newUser, chatId);
+            removeKeepLoginInMind(chatId);
+            sendUserMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
+        } else if(data.equals("backRL")) {
+            sessionService.setSession("Ничего", currentUser);
+            userService.setWroteUsername(currentUser, false);
+            userService.setWrotePassword(currentUser, false);
+            sendRegLogButton(chatId, messageId, "Выберите способ авторизации");
+        }
     }
     public void setCheckPassword(Long chatId, String password) {
         checkPassword.put(chatId, password);

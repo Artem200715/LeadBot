@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UpdateConsumer implements LongPollingUpdateConsumer {
     Map<Long, String> checkPassword = new ConcurrentHashMap<>();
     Map<Long, String> keepLoginInMind = new ConcurrentHashMap<>();
+//    Map<Long, String> keepLogin = new ConcurrentHashMap<>();
+//    Map<Long, String> keepPassword = new ConcurrentHashMap<>();
     private final TelegramClient telegramClient;
     private final LeadService leadService;
     private final UserService userService;
@@ -68,6 +70,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                     currentUser.setWroteUsername(false);
                     currentUser.setWrotePassword(false);
                     currentUser.setIsRegistered(false);
+                    currentUser.setChatId(null);
                     sessionService.setSession("Ничего", currentUser);
                 } else {
                     if(!currentUser.getIsRegistered()) {
@@ -80,8 +83,6 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                             sessionService.setSession("Повтор пароля", currentUser);
                         } else if(currentSession.equals("Повтор пароля")) {
                             if (passwordEncoder.matches(text, getCheckPassword(chatId))) {
-                                userService.setPassword(getCheckPassword(chatId), currentUser);
-                                removeCheckPassword(chatId);
                                 userService.setWrotePassword(currentUser, true);
                                 sessionService.setSession("Регистрация", currentUser);
                                 sendRegButton(chatId, "Для регистрации введите следующие данные", currentUser);
@@ -94,7 +95,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                             } else {
                                 sessionService.setSession("Регистрация", currentUser);
                                 userService.setWroteUsername(currentUser, true);
-                                userService.setUsername(text, currentUser);
+                                keepLoginInMind.put(chatId, text);
                                 sendRegButton(chatId, "Для регистрации введите следующие данные:", currentUser);
                             }
                         } else if (currentSession.equals("Ввод логинаЛ")) {
@@ -141,10 +142,14 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                     } else if(data.equals("completeR")) {
                         userService.setIsRegistered(currentUser, true);
                         sessionService.setSession("Ничего", currentUser);
+                        userService.setUsername(keepLoginInMind.get(chatId), currentUser);
+                        userService.setPassword(checkPassword.get(chatId), currentUser);
+                        removeKeepLoginInMind(chatId);
+                        removeCheckPassword(chatId);
                         userService.setWroteUsername(currentUser, false);
                         userService.setWrotePassword(currentUser, false);
                         userService.setCreatedAt(currentUser);
-                        sendMenuButton(chatId, messageId, "Вы успешно создали аккаунт!");
+                        sendUserMenuButton(chatId, messageId, "Вы успешно создали аккаунт!");
                     } else if (data.equals("login") && currentSession.equals("Ничего")) {
                         sendLogButton(chatId, messageId, "Введите следующие данные для входа в аккаунт:", currentUser);
                         sessionService.setSession("Логин",  currentUser);
@@ -166,8 +171,8 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         userService.setWrotePassword(newUser, false);
                         userService.deleteCurrentUser(chatId);
                         userService.setChatId(newUser, chatId);
-                        keepLoginInMind.remove(chatId);
-                        sendMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
+                        removeKeepLoginInMind(chatId);
+                        sendUserMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
                     } else if(data.equals("backRL")) {
                         sessionService.setSession("Ничего", currentUser);
                         userService.setWroteUsername(currentUser, false);
@@ -361,7 +366,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
         editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
         telegramClient.execute(editMessage);
     }
-    public void sendMenuButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
+    public void sendUserMenuButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
         EditMessageText editMessage = EditMessageText.builder()
                 .chatId(chatId)
                 .messageId(messageId)
@@ -386,5 +391,8 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
     }
     public void removeCheckPassword(Long chatId) {
         checkPassword.remove(chatId);
+    }
+    public void removeKeepLoginInMind(Long chatId) {
+        keepLoginInMind.remove(chatId);
     }
 }

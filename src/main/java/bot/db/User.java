@@ -38,7 +38,7 @@ public class User {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "chatid")
+    @Column(name = "chatid", unique = true)
     private Long chatId;
 
     @Column(name = "completed_leads")

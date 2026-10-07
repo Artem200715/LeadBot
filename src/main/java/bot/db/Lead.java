@@ -26,6 +26,12 @@ public class Lead {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name="name")
+    private String name;
+
+    @Column(name="phone")
+    private String phone;
+
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 

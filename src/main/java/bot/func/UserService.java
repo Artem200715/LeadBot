@@ -8,6 +8,7 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -46,7 +47,7 @@ public class UserService {
         tempUser.setSession(session);
         tempUser.setIsRegistered(false);
         entityManager.persist(tempUser);
-        entityManager.flush();
+
     }
 
     @Transactional
@@ -77,10 +78,9 @@ public class UserService {
         tempWorker.setSession(session);
         tempWorker.setIsRegistered(false);
         entityManager.persist(tempWorker);
-        entityManager.flush();
+
     }
 
-    @Transactional
     public boolean checkWrotePassword(Long chatId) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE chatId = :chatId", User.class);
         query.setParameter("chatId", chatId);
@@ -93,7 +93,6 @@ public class UserService {
         return Boolean.TRUE.equals(user.getWrotePassword());
     }
 
-    @Transactional
     public boolean checkWrotePasswordWorker(Long chatId) {
         TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE chatId = :chatId", Worker.class);
         query.setParameter("chatId", chatId);
@@ -106,7 +105,7 @@ public class UserService {
         return Boolean.TRUE.equals(user.getWrotePassword());
     }
 
-    @Transactional
+
     public boolean checkWroteUsername(Long chatId) {
         TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE chatId = :chatId", Worker.class);
         query.setParameter("chatId", chatId);
@@ -123,31 +122,30 @@ public class UserService {
     public void setWroteUsername(User user, boolean wrote) {
         user.setWroteUsername(wrote);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setWroteUsername(Worker user, boolean wrote) {
         user.setWroteUsername(wrote);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setWrotePassword(User user, boolean wrote) {
         user.setWrotePassword(wrote);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setWrotePassword(Worker user, boolean wrote) {
         user.setWrotePassword(wrote);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
-    @Transactional
     public boolean checkLogin(String login) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE username = :username", User.class);
         query.setParameter("username", login);
@@ -160,7 +158,6 @@ public class UserService {
         return user != null;
     }
 
-    @Transactional
     public boolean checkLoginWorker(String login) {
         TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE username = :username", Worker.class);
         query.setParameter("username", login);
@@ -177,45 +174,44 @@ public class UserService {
     public void deleteChatId(User user) {
         user.setChatId(null);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void deleteChatId(Worker user) {
         user.setChatId(null);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setChatId(User user, Long chatId) {
         user.setChatId(chatId);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setChatId(Worker user, Long chatId) {
         user.setChatId(chatId);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setCreatedAt(User user) {
         user.setCreatedAt(LocalDateTime.now());
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setCreatedAt(Worker user) {
         user.setCreatedAt(LocalDateTime.now());
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
-    @Transactional
     public User findUserById(Long chatId) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE chatId = :chatId", User.class);
         query.setParameter("chatId", chatId);
@@ -234,7 +230,6 @@ public class UserService {
         return user;
     }
 
-    @Transactional
     public Worker findWorkerById(Long chatId) {
         TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE chatId = :chatId", Worker.class);
         query.setParameter("chatId", chatId);
@@ -245,7 +240,6 @@ public class UserService {
         }
     }
 
-    @Transactional
     public User findUserByLogin(String login) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE username = :username", User.class);
         query.setParameter("username", login);
@@ -258,7 +252,6 @@ public class UserService {
         return user;
     }
 
-    @Transactional
     public Worker findWorkerByLogin(String login) {
         TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE username = :username", Worker.class);
         query.setParameter("username", login);
@@ -303,42 +296,42 @@ public class UserService {
     public void setPassword(String password, User user) {
         user.setPassword(password);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setPassword(String password, Worker user) {
         user.setPassword(password);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setIsRegistered(User user, boolean isRegistered) {
         user.setIsRegistered(isRegistered);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setIsRegistered(Worker user, boolean isRegistered) {
         user.setIsRegistered(isRegistered);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setUsername(String username, User user) {
         user.setUsername(username);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     @Transactional
     public void setUsername(String username, Worker user) {
         user.setUsername(username);
         entityManager.merge(user);
-        entityManager.flush();
+
     }
 
     // Может быть сделаю отдельным классом
@@ -346,19 +339,22 @@ public class UserService {
     public void setIsWork(Worker worker, boolean inWork) {
         worker.setInWork(inWork);
         entityManager.merge(worker);
-        entityManager.flush();
     }
 
     @Transactional
     public Worker getFirstFreeAndRegWorker() {
-        TypedQuery<Worker> query = entityManager.createQuery("FROM Worker WHERE inWork = false AND is_registered = true", Worker.class);
-        Worker worker;
-        try {
-            worker = query.getSingleResult();
-        } catch (NoResultException e) {
+
+        jakarta.persistence.TypedQuery<Worker> query = entityManager.createQuery(
+                "FROM Worker WHERE inWork = false AND isRegistered = true ORDER BY id ASC",
+                Worker.class);
+        query.setMaxResults(1);
+
+
+        java.util.List<Worker> result = query.getResultList();
+        if (result.isEmpty()) {
             return null;
         }
-        return worker;
+        return result.getFirst();
     }
 
 }

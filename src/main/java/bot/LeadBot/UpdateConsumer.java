@@ -55,7 +55,6 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
         updates.forEach(this::processUpdateAsync);
     }
 
-    @Async
     public void processUpdateAsync(Update update) {
         try {
             Long chatId = null;
@@ -75,8 +74,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
             Worker maybeWorker = workerFlag ? userService.findWorkerById(chatId) : null;
 
             if (maybeWorker != null && Boolean.TRUE.equals(maybeWorker.getIsRegistered())) {
-                Worker currentUser = maybeWorker;
-                String currentSession = currentUser.getSession().getName();
+                String currentSession = maybeWorker.getSession().getName();
                 if (update.hasMessage()) {
                     String text = update.getMessage().getText();
                     if (text.equals("/help")) {
@@ -86,21 +84,22 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                                 (Осторожно, бездумный перезапуск может сломать некоторые процессы, так что
                                 перезапускайте бота только в случае полной поломки!!!)""");
                     } else if (text.equals("/restart")) {
-                        currentUser.setWroteUsername(false);
-                        currentUser.setWrotePassword(false);
-                        currentUser.setIsRegistered(false);
-                        currentUser.setChatId(null);
-                        sessionService.setSession("Ничего", currentUser);
-                        isWorker.put(chatId, false);
+                        maybeWorker.setWroteUsername(false);
+                        maybeWorker.setWrotePassword(false);
+                        keepPhone.remove(chatId);
+                        keepLoginInMind.remove(chatId);
+                        keepName.remove(chatId);
+                        checkPassword.remove(chatId);
+                        sessionService.setSession("Ничего", maybeWorker);
                         sendRegLogButton(chatId, "Выберите способ авторизации:");
                     }
                 } else if (update.hasCallbackQuery()) {
                     String data = update.getCallbackQuery().getData();
                     Integer messageId = update.getCallbackQuery().getMessage().getMessageId();
                     if (data.equals("logout")) {
-                        sessionService.setSession("Ничего", currentUser);
-                        userService.setIsRegistered(currentUser, false);
-                        userService.deleteChatId(currentUser);
+                        sessionService.setSession("Ничего", maybeWorker);
+                        userService.setIsRegistered(maybeWorker, false);
+                        userService.deleteChatId(maybeWorker);
                         isWorker.put(chatId, false);
                         editMessage(chatId, messageId, "Вы успешно вышли из аккаунта!");
                         sendRegLogButton(chatId, "Выберите способ авторизации:");
@@ -124,10 +123,11 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                     } else if (text.equals("/restart")) {
                         currentUser.setWroteUsername(false);
                         currentUser.setWrotePassword(false);
-                        currentUser.setIsRegistered(false);
-                        currentUser.setChatId(null);
+                        keepPhone.remove(chatId);
+                        keepLoginInMind.remove(chatId);
+                        keepName.remove(chatId);
+                        checkPassword.remove(chatId);
                         sessionService.setSession("Ничего", currentUser);
-                        isWorker.put(chatId, false);
                         sendRegLogButton(chatId, "Выберите способ авторизации:");
                     } else {
                         if (!currentUser.getIsRegistered()) {
@@ -145,6 +145,30 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                 } else if (update.hasCallbackQuery()) {
                     String data = update.getCallbackQuery().getData();
                     Integer messageId = update.getCallbackQuery().getMessage().getMessageId();
+
+                    if (data.equals("continue") && currentSession.equals("Телефон")) {
+                        sessionService.setSession("Ничего", currentUser);
+
+                        Worker freeWorker = leadService.assignAndCreateLead(
+                                keepName.get(chatId),
+                                keepPhone.get(chatId),
+                                LocalDateTime.now(),
+                                chatId,
+                                statusService.getStatusFromTable("NEW")
+                        );
+
+                        if (freeWorker == null) {
+                            editMessage(chatId, messageId, "На данный момент свободных операторов нет, ваша заявка будет рассмотрена первым освободившемся оператором");
+                            sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
+                        } else {
+                            editMessage(chatId, messageId, "Ваша заявка была отправлена оператору");
+                            sendMessage(freeWorker.getChatId(), "Вам пришла заявка от пользователя " + userService.findUserById(chatId).getUsername() + "\n" + "Название услуги: " + keepName.get(chatId) + "\n" + "Номер телефона: " + keepPhone.get(chatId) + "\n" + "Выберите действие с этой заявкой:");
+                            sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
+                        }
+                        keepName.remove(chatId);
+                        keepPhone.remove(chatId);
+                        return;
+                    }
                     if (!currentUser.getIsRegistered()) {
                         authorizationCQ(chatId, currentUser, currentSession, data, messageId);
                     } else {
@@ -163,22 +187,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         } else if (data.equals("continue")) {
                             if (currentSession.equals("Название услуги")) {
                                 sessionService.setSession("Телефон", currentUser);
-                            } else if(currentSession.equals("Телефон")) {
-                                sessionService.setSession("Ничего", currentUser);
-                                if (userService.getFirstFreeAndRegWorker() == null) {
-                                    editMessage(chatId, messageId, "На данный момент свободных операторов нет, ваша заявка будет рассмотрена первым освободившемся оператором");
-                                    leadService.createLead(keepName.get(chatId), keepPhone.get(chatId), LocalDateTime.now(), currentUser, statusService.getStatusFromTable("NEW"), null);
-                                    keepName.remove(chatId);
-                                    keepPhone.remove(chatId);
-                                    sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
-                                } else {
-                                    leadService.createLead(keepName.get(chatId), keepPhone.get(chatId), LocalDateTime.now(), currentUser, statusService.getStatusFromTable("NEW"), userService.getFirstFreeAndRegWorker());
-                                    editMessage(chatId, messageId, "Ваша заявка была отправлена оператору");
-                                    sendMessage(userService.getFirstFreeAndRegWorker().getChatId(), "Вам пришла заявка от пользователя " + userService.findUserById(chatId).getUsername() + "\n" + "Название услуги: " + keepName.get(chatId) + "\n" + "Номер телефона: " + keepPhone.get(chatId) + "\n" + "Выберите действие с этой заявкой:");
-                                    keepName.remove(chatId);
-                                    keepPhone.remove(chatId);
-                                    sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
-                                }
+                                editMessage(chatId, messageId, "Введите свой номер телефона:");
                             }
                         } else if (data.equals("exit")) {
                             keepName.remove(chatId);
@@ -825,5 +834,24 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
     }
     public void removeKeepLoginInMind(Long chatId) {
         keepLoginInMind.remove(chatId);
+    }
+    @Async
+    public void sendLeadNotificationsAsync(Long chatId, Integer messageId, Worker freeWorker, String userName, String keepNameText, String keepPhoneText) {
+        try {
+            if (freeWorker == null) {
+                editMessage(chatId, messageId, "На данный момент свободных операторов нет, ваша заявка будет рассмотрена первым освободившемся оператором");
+            } else {
+                editMessage(chatId, messageId, "Ваша заявка была отправлена оператору");
+
+                String workerMessage = "Вам пришла заявка от пользователя " + userName + "\n" +
+                        "Название услуги: " + keepNameText + "\n" +
+                        "Номер телефона: " + keepPhoneText + "\n" +
+                        "Выберите действие с этой заявкой:";
+                sendMessage(freeWorker.getChatId(), workerMessage);
+            }
+            sendUserMenuButton(chatId, "Приветствую, " + userName + "!");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

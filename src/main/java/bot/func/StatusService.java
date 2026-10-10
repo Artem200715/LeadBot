@@ -15,7 +15,7 @@ public class StatusService {
 
     @Transactional
     public Status getStatusFromTable(String name){
-        TypedQuery<Status> query = entityManager.createNamedQuery("FROM Status WHERE name=:name", Status.class);
+        TypedQuery<Status> query = entityManager.createQuery("FROM Status WHERE name=:name", Status.class);
         query.setParameter("name", name);
         return query.getSingleResult();
     }

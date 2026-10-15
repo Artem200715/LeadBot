@@ -1,5 +1,6 @@
 package bot.LeadBot;
 
+import bot.db.Lead;
 import bot.db.User;
 import bot.db.Worker;
 import bot.func.LeadService;
@@ -92,6 +93,14 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         checkPassword.remove(chatId);
                         sessionService.setSession("Ничего", maybeWorker);
                         sendRegLogButton(chatId, "Выберите способ авторизации:");
+                    } else {
+                        if (maybeWorker.getIsRegistered()) {
+                            if (text.equals("/logout")) {
+                                userService.setIsRegistered(maybeWorker, false);
+                                userService.deleteChatId(maybeWorker);
+                                sendRegLogButton(chatId, "Выберите способ авторизации:");
+                            }
+                        }
                     }
                 } else if (update.hasCallbackQuery()) {
                     String data = update.getCallbackQuery().getData();
@@ -103,7 +112,52 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         isWorker.put(chatId, false);
                         editMessage(chatId, messageId, "Вы успешно вышли из аккаунта!");
                         sendRegLogButton(chatId, "Выберите способ авторизации:");
+                    } else if (data.equals("take")) {
+                        sendInWorkButton(chatId, messageId, "Вы взяли заявку в работу");
+                        Lead lea = leadService.getLead(maybeWorker);
+                        statusService.setStatus(statusService.getStatusFromTable("IN WORK"), lea);
+                        //Завтрашний я, нужно что то сделать с cancel, эта гадюка не меняет статусы у работника и лида
+                    } else if (data.equals("cancel")) {
+                        Worker nextWorker = userService.getFirstFreeAndRegWorker();
+                        if (nextWorker != null) {
+                            leadService.giveThisLead(nextWorker, leadService.getLead(maybeWorker));
+                            Lead newLead = leadService.getLead(nextWorker);
+                            sendLeadButton(nextWorker.getChatId(), "Вам пришла заявка от пользователя " + newLead.getUser().getUsername() + "\n" + "Название услуги: " + newLead.getName() + "\n" + "Номер телефона: " + newLead.getPhone() + "\n" + "Выберите действие с этой заявкой:");
+                            editMessage(chatId, messageId, "Вы успешно передали заявку другому работнику");
+                            userService.setInWork(maybeWorker, false);
+                        } else {
+                            editMessage(chatId, messageId, "К сожалению свободных сотрудников нет, но мы сняли с вас эту заявку");
+                            Lead lea = leadService.getLead(maybeWorker);
+                            leadService.deleteWorker(lea);
+                            statusService.setStatus(statusService.getStatusFromTable("NEW"), lea);
+                            userService.setInWork(maybeWorker, false);
+                        }
+
+
+                    } else if (data.equals("delete")) {
+                        Lead lead = leadService.getLead(maybeWorker);
+                        statusService.setStatus(statusService.getStatusFromTable("LOST"), lead);
+                        userService.setInWork(maybeWorker, false);
+                        Worker newWorker = userService.getFirstFreeAndRegWorker();
+                        if (leadService.giveLead(newWorker)) {
+                            userService.setInWork(newWorker, true);
+                            Lead newLead = leadService.getLead(newWorker);
+                            sendLeadButton(newWorker.getChatId(), "Вам пришла заявка от пользователя " + newLead.getUser().getUsername() + "\n" + "Название услуги: " + newLead.getName() + "\n" + "Номер телефона: " + newLead.getPhone() + "\n" + "Выберите действие с этой заявкой:");
+                        }
+                        editMessage(chatId, messageId, "Вы успешно отменили заявку");
+                    } else if (data.equals("finish")) {
+                        Lead thisLead = leadService.getLead(maybeWorker);
+                        statusService.setStatus(statusService.getStatusFromTable("WON"), thisLead);
+                        userService.setInWork(maybeWorker, false);
+                        Worker worker = userService.getFirstFreeAndRegWorker();
+                        editMessage(chatId, messageId, "Вы - красавчик!");
+                        if (leadService.giveLead(worker)) {
+                            userService.setInWork(worker, true);
+                            Lead newLead = leadService.getLead(worker);
+                            sendLeadButton(worker.getChatId(), "Вам пришла заявка от пользователя " + newLead.getUser().getUsername() + "\n" + "Название услуги: " + newLead.getName() + "\n" + "Номер телефона: " + newLead.getPhone() + "\n" + "Выберите действие с этой заявкой:");
+                        }
                     }
+
                 }
             } else {
                 User currentUser = userService.findUserById(chatId);
@@ -133,13 +187,18 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                         if (!currentUser.getIsRegistered()) {
                             authorizationM(chatId, currentUser, currentSession, text);
                         } else {
-                            if (currentSession.equals("Название услуги")) {
+                            if (text.equals("/logout")) {
+                                userService.setIsRegistered(currentUser, false);
+                                userService.deleteChatId(currentUser);
+                                sendRegLogButton(chatId, "Выберите способ авторизации:");
+                            } else if (currentSession.equals("Название услуги")) {
                                 keepName.put(chatId, text);
                                 sendAgainButton(chatId, "Готовы продолжить?");
                             } else if (currentSession.equals("Телефон")) {
                                 keepPhone.put(chatId, text);
                                 sendAgainButton(chatId, "Готовы продолжить?");
                             }
+
                         }
                     }
                 } else if (update.hasCallbackQuery()) {
@@ -153,8 +212,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                                 keepName.get(chatId),
                                 keepPhone.get(chatId),
                                 LocalDateTime.now(),
-                                chatId,
-                                statusService.getStatusFromTable("NEW")
+                                chatId
                         );
 
                         if (freeWorker == null) {
@@ -162,7 +220,7 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                             sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
                         } else {
                             editMessage(chatId, messageId, "Ваша заявка была отправлена оператору");
-                            sendMessage(freeWorker.getChatId(), "Вам пришла заявка от пользователя " + userService.findUserById(chatId).getUsername() + "\n" + "Название услуги: " + keepName.get(chatId) + "\n" + "Номер телефона: " + keepPhone.get(chatId) + "\n" + "Выберите действие с этой заявкой:");
+                            sendLeadButton(freeWorker.getChatId(), "Вам пришла заявка от пользователя " + userService.findUserById(chatId).getUsername() + "\n" + "Название услуги: " + keepName.get(chatId) + "\n" + "Номер телефона: " + keepPhone.get(chatId) + "\n" + "Выберите действие с этой заявкой:");
                             sendUserMenuButton(chatId, "Приветствую, " + update.getCallbackQuery().getMessage().getChat().getUserName() + "!");
                         }
                         keepName.remove(chatId);
@@ -201,7 +259,41 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
             throw new RuntimeException(ex);
         }
     }
+    public void sendInWorkButton(Long chatId, Integer messageId, String answer) throws TelegramApiException {
+        EditMessageText editMessage = EditMessageText.builder()
+                .chatId(chatId)
+                .messageId(messageId)
+                .text(answer)
+                .build();
 
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("\"Я всё\"", "finish"),
+                createBtn("\"Это не в моих силах\"", "cancel")
+        ));
+
+        editMessage.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(editMessage);
+    }
+    public void sendLeadButton(Long chatId, String answer) throws TelegramApiException {
+        SendMessage message = SendMessage.builder()
+                .chatId(chatId)
+                .text(answer)
+                .build();
+        List<InlineKeyboardRow> keyboard = new ArrayList<>();
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Взять в работу", "take")
+        ));
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Отказаться (передать другому сотруднику)", "cancel")
+        ));
+        keyboard.add(new InlineKeyboardRow(
+                createBtn("Отменить заявку (если она невыполнима)", "delete")
+        ));
+        message.setReplyMarkup(new InlineKeyboardMarkup(keyboard));
+        telegramClient.execute(message);
+    }
     public void sendMessage(Long chatId, String answer) {
         SendMessage sendMessage = SendMessage.builder()
                 .chatId(chatId)
@@ -744,6 +836,12 @@ public class UpdateConsumer implements LongPollingUpdateConsumer {
                 removeKeepLoginInMind(chatId);
                 isWorker.put(chatId, true);
                 sendWorkerMenuButton(chatId, messageId, "Вы успешно вошли в аккаунт!");
+                if (leadService.giveLead(newWorker)) {
+                    userService.setInWork(newWorker, true);
+                    Lead newLead = leadService.getLead(newWorker);
+                    sendLeadButton(newWorker.getChatId(), "Вам пришла заявка от пользователя " + newLead.getUser().getUsername() + "\n" + "Название услуги: " + newLead.getName() + "\n" + "Номер телефона: " + newLead.getPhone() + "\n" + "Выберите действие с этой заявкой:");
+                }
+
             } else {
                 User newUser = userService.findUserByLogin(login);
                 userService.setIsRegistered(newUser, true);

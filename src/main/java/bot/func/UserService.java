@@ -211,7 +211,7 @@ public class UserService {
         entityManager.merge(user);
 
     }
-
+    @Transactional
     public User findUserById(Long chatId) {
         TypedQuery<User> query = entityManager.createQuery("FROM User WHERE chatId = :chatId", User.class);
         query.setParameter("chatId", chatId);
@@ -336,7 +336,7 @@ public class UserService {
 
     // Может быть сделаю отдельным классом
     @Transactional
-    public void setIsWork(Worker worker, boolean inWork) {
+    public void setInWork(Worker worker, boolean inWork) {
         worker.setInWork(inWork);
         entityManager.merge(worker);
     }
